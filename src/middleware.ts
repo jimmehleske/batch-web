@@ -1,9 +1,4 @@
 import { type NextRequest } from 'next/server'
-import { updateSession } from '@/utils/supabase/middleware' 
-
-// We need a small helper utility for middleware specifically
-// Since we don't have that file yet, let's use a simpler version right here:
-
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
@@ -60,7 +55,6 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
