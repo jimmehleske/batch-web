@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase' // Change Importimport Link from 'next/link';
+import { createClient } from '@/lib/supabase';
+import Link from 'next/link'; // <--- This was missing!
 import { notFound } from 'next/navigation';
 
 // --- HELPER: Unit Normalization ---
@@ -30,10 +31,10 @@ function calculateRowCost(item: any) {
   return costPerBaseUnit * recipeBaseQty;
 }
 
-export default async function FormulaDetailPage({ params }: { params: { id: string } }) {
+export default async function FormulaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const supabase = await createClient(); // <--- Security Check
   
-  const supabase = await createClient() // Create client inside the function
   const { data: formula } = await supabase
     .from('formulas')
     .select(`
