@@ -64,6 +64,11 @@ export default function Home() {
           </p>
         </Link>
 
+        <Link href="/pricing" className="...">
+          <h2 className="...">Live Pricing -></h2>
+          <p className="...">Check current supermarket prices.</p>
+        </Link>
+
       </div>
     </main>
   );
