@@ -1,41 +1,44 @@
 'use server'
 
 export async function searchWoolies(searchTerm: string) {
-  const API_KEY = 'c35e590b5bd54c132dcfa8139b53809e92df140d'; // Your Key
+  const API_KEY = 'c35e590b5bd54c132dcfa8139b53809e92df140d';
   
-  // We target the search page directly
-  const targetUrl = `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(searchTerm)}`;
+  // STRATEGY CHANGE: 
+  // Instead of fighting the Woolworths firewall directly, we ask Google Shopping.
+  // We search specifically for "Woolworths [Item]" to get their pricing.
+  const query = `Woolworths ${searchTerm}`;
+  const targetUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=shop`;
   
-  // We ask ZenRows to:
-  // 1. Visit the URL
-  // 2. Render JavaScript (Woolies is a JS app)
-  // 3. Act like a Human (antibot)
-  // 4. Auto-extract the product data (autoparse)
-  const zenRowsUrl = `https://api.zenrows.com/v1/?apikey=${API_KEY}&url=${encodeURIComponent(targetUrl)}&js_render=true&antibot=true&autoparse=true`;
+  // We enable 'autoparse' which works perfectly on Google Shopping results
+  const zenRowsUrl = `https://api.zenrows.com/v1/?apikey=${API_KEY}&url=${encodeURIComponent(targetUrl)}&autoparse=true&premium_proxy=true&antibot=true`;
 
   try {
-    console.log(`Scanning Woolies for: ${searchTerm}...`);
+    console.log(`Asking Google Shopping for: ${query}...`);
     
-    const response = await fetch(zenRowsUrl, { 
-      cache: 'no-store' // Always get fresh prices
-    });
+    const response = await fetch(zenRowsUrl, { cache: 'no-store' });
 
     if (!response.ok) {
       console.error("ZenRows Error:", response.status);
-      return { error: 'Supermarket blocked the connection. Try again.' };
+      return { error: 'Search failed. Please try again.' };
     }
 
     const data = await response.json();
-    
-    // ZenRows 'autoparse' usually finds a list of items.
-    // We map their generic structure to our app's structure.
-    const products = data.map((item: any) => ({
-      Stockcode: Math.random(), // We don't get real IDs from scraping, so we fake one for the key
-      Name: item.title || item.name || 'Unknown Product',
-      Price: parsePrice(item.price),
-      PackageSize: '', // Scrapers often miss this specific detail
-      IsAvailable: true
-    })).filter((p: any) => p.Price > 0); // Remove items with no price found
+
+    // The autoparse result for Google Shopping usually puts items in 'shopping_results' or 'organic_results'
+    // We try to find the best list.
+    const results = data.shopping_results || data.organic_results || [];
+
+    const products = results.map((item: any) => ({
+      Stockcode: Math.random(), // Fake ID
+      Name: item.title,
+      Price: parsePrice(item.price), // Extracts "$5.50" -> 5.50
+      PackageSize: '', 
+      IsAvailable: true,
+      Source: item.source // e.g., "Woolworths"
+    }))
+    // Optional: Filter to only show Woolworths if you want to be strict
+    // .filter((p: any) => p.Source && p.Source.includes('Woolworths'))
+    .slice(0, 10); // Take top 10
 
     return { products };
 
@@ -45,12 +48,11 @@ export async function searchWoolies(searchTerm: string) {
   }
 }
 
-// Helper to clean up price strings like "$5.50 each" -> 5.50
 function parsePrice(priceStr: string | number): number {
   if (typeof priceStr === 'number') return priceStr;
   if (!priceStr) return 0;
   
-  // Remove '$', 'each', whitespace, etc.
+  // Google often returns "AUD 5.50" or "$5.50"
   const clean = priceStr.replace(/[^\d.]/g, '');
   return parseFloat(clean) || 0;
 }
