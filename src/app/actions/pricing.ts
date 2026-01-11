@@ -1,66 +1,41 @@
 'use server'
 
-interface WooliesProduct {
-  TileID: number;
-  Stockcode: number;
-  Name: string;
-  Price: number;
-  IsAvailable: boolean;
-  PackageSize: string; // e.g. "1kg"
-}
-
 export async function searchWoolies(searchTerm: string) {
-  // 1. The "Hidden" API Endpoint
-  const endpoint = 'https://www.woolworths.com.au/apis/ui/Search/products';
-
-  // 2. We must pretend to be a real browser (User-Agent is critical)
-  const headers = {
-    'Content-Type': 'application/json',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Origin': 'https://www.woolworths.com.au',
-    'Referer': 'https://www.woolworths.com.au'
-  };
-
-  // 3. The Payload they expect
-  const payload = {
-    SearchTerm: searchTerm,
-    PageSize: 10,
-    PageNumber: 1,
-    SortType: "Relevance",
-    Location: "/shop/search/products",
-    IsSpecial: false,
-    Filters: [],
-    LocationId: 0 // Default store
-  };
+  const API_KEY = 'c35e590b5bd54c132dcfa8139b53809e92df140d'; // Your Key
+  
+  // We target the search page directly
+  const targetUrl = `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(searchTerm)}`;
+  
+  // We ask ZenRows to:
+  // 1. Visit the URL
+  // 2. Render JavaScript (Woolies is a JS app)
+  // 3. Act like a Human (antibot)
+  // 4. Auto-extract the product data (autoparse)
+  const zenRowsUrl = `https://api.zenrows.com/v1/?apikey=${API_KEY}&url=${encodeURIComponent(targetUrl)}&js_render=true&antibot=true&autoparse=true`;
 
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(payload),
-      next: { revalidate: 0 } // Don't cache live prices
+    console.log(`Scanning Woolies for: ${searchTerm}...`);
+    
+    const response = await fetch(zenRowsUrl, { 
+      cache: 'no-store' // Always get fresh prices
     });
 
     if (!response.ok) {
-      console.error("Woolies API Error:", response.status, await response.text());
-      return { error: 'Failed to connect to supermarket' };
+      console.error("ZenRows Error:", response.status);
+      return { error: 'Supermarket blocked the connection. Try again.' };
     }
 
     const data = await response.json();
     
-    // 4. Clean up the messy data they return
-    const products: WooliesProduct[] = data.Products
-      ?.filter((p: any) => p.Products && p.Products[0]) // Filter out ads/empty tiles
-      .map((p: any) => {
-        const item = p.Products[0]; // They nest products inside 'Products' array
-        return {
-          Stockcode: item.Stockcode,
-          Name: item.DisplayName || item.Name,
-          Price: item.Price,
-          IsAvailable: item.IsAvailable,
-          PackageSize: item.PackageSize
-        };
-      });
+    // ZenRows 'autoparse' usually finds a list of items.
+    // We map their generic structure to our app's structure.
+    const products = data.map((item: any) => ({
+      Stockcode: Math.random(), // We don't get real IDs from scraping, so we fake one for the key
+      Name: item.title || item.name || 'Unknown Product',
+      Price: parsePrice(item.price),
+      PackageSize: '', // Scrapers often miss this specific detail
+      IsAvailable: true
+    })).filter((p: any) => p.Price > 0); // Remove items with no price found
 
     return { products };
 
@@ -68,4 +43,14 @@ export async function searchWoolies(searchTerm: string) {
     console.error(err);
     return { error: 'Failed to fetch prices' };
   }
+}
+
+// Helper to clean up price strings like "$5.50 each" -> 5.50
+function parsePrice(priceStr: string | number): number {
+  if (typeof priceStr === 'number') return priceStr;
+  if (!priceStr) return 0;
+  
+  // Remove '$', 'each', whitespace, etc.
+  const clean = priceStr.replace(/[^\d.]/g, '');
+  return parseFloat(clean) || 0;
 }
