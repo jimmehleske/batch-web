@@ -6,8 +6,6 @@ import { revalidatePath } from 'next/cache'
 // --- HELPER: Unit Conversion Logic ---
 function getBaseFactor(unit: string) {
   // We normalize everything to 'g' or 'ml'
-  // kg -> 1000g
-  // L  -> 1000ml
   switch (unit) {
     case 'kg': return 1000;
     case 'L':  return 1000;
@@ -15,14 +13,15 @@ function getBaseFactor(unit: string) {
     case 'ml': return 1;
     case 'units': return 1;
     case 'unit': return 1;
-    default: return 1; // Fallback for 'each', 'bunch', etc.
+    default: return 1;
   }
 }
 
 export async function updateBatchStatus(batchId: string, newStatus: 'planned' | 'in_progress' | 'completed') {
   
-  // 1. Update the status
   const supabase = await createClient()
+
+  // 1. Update the status
   const { error } = await supabase
     .from('batches')
     .update({ status: newStatus })
@@ -39,6 +38,8 @@ export async function updateBatchStatus(batchId: string, newStatus: 'planned' | 
 }
 
 async function deductInventoryForBatch(batchId: string) {
+  const supabase = await createClient()
+
   // A. Fetch Batch + Formula Items + Supplier Details
   const { data: batch } = await supabase
     .from('batches')
@@ -71,17 +72,14 @@ async function deductInventoryForBatch(batchId: string) {
 
     if (!supplierItem) continue
 
-    // 2. Normalize Recipe Usage (e.g. 500g becomes 500)
+    // 2. Normalize Recipe Usage
     const recipeBaseFactor = getBaseFactor(item.unit_used)
     const totalRecipeQtyBase = (item.quantity_required * scaleFactor) * recipeBaseFactor
 
-    // 3. Normalize Supplier Unit (e.g. 1kg becomes 1000)
-    // The Ledger tracks stock in the SUPPLIER'S unit (e.g. "We have 5 kg").
-    // So if we use 500g, we need to deduct 0.5 (kg).
+    // 3. Normalize Supplier Unit
     const supplierBaseFactor = getBaseFactor(supplierItem.purchase_unit)
 
     // 4. Calculate Final Deduction
-    // Example: (361g * 1) / 1000 = 0.361 kg
     const deductionQty = totalRecipeQtyBase / supplierBaseFactor
 
     transactions.push({
