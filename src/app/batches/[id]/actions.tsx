@@ -29,7 +29,7 @@ export async function updateBatchStatus(batchId: string, newStatus: 'planned' | 
 
   if (error) throw new Error('Failed to update status')
 
-  // 2. If completing, deduct from inventory using smart conversion
+  // 2. If completing, deduct from inventory
   if (newStatus === 'completed') {
     await deductInventoryForBatch(batchId)
   }
@@ -41,7 +41,7 @@ async function deductInventoryForBatch(batchId: string) {
   const supabase = await createClient()
 
   // A. Fetch Batch + Formula Items + Supplier Details
-  const { data: batch } = await supabase
+  const { data: batchData } = await supabase
     .from('batches')
     .select(`
       target_yield,
@@ -59,13 +59,22 @@ async function deductInventoryForBatch(batchId: string) {
     .eq('id', batchId)
     .single()
 
-  if (!batch) return
+  if (!batchData) return
 
-  const scaleFactor = batch.target_yield / (batch.formulas.batch_yield_quantity || 1)
+  // --- THE FIX IS HERE ---
+  // Cast to 'any' to stop TypeScript from complaining about arrays vs objects
+  const batch: any = batchData;
+
+  // robust check: If formulas is an array, take the first one. If object, use it.
+  const formula = Array.isArray(batch.formulas) ? batch.formulas[0] : batch.formulas;
+
+  if (!formula) return; // Safety check
+
+  const scaleFactor = batch.target_yield / (formula.batch_yield_quantity || 1)
   const transactions: any[] = []
 
-  // B. Loop through ingredients
-  for (const item of batch.formulas.formula_items) {
+  // B. Loop through ingredients using the extracted 'formula' object
+  for (const item of formula.formula_items) {
     // 1. Find Supplier
     const supplierItem = item.master_ingredients.supplier_items?.find((i: any) => i.is_primary) 
                       || item.master_ingredients.supplier_items?.[0]
