@@ -2,12 +2,15 @@ import { createClient } from '@/lib/supabase';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
-// 1. THE FIX: The Server Action is now completely OUTSIDE the page component.
-// It runs in total isolation, so Next.js doesn't choke trying to package the page's memory.
+// 1. The Server Action
 async function createMaterial(formData: FormData) {
   'use server';
 
   const supabase = await createClient();
+  
+  // THE FIX: Explicitly get the logged-in user so we can stamp the database rows
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('You must be logged in to add materials.');
 
   const rawName = formData.get('name') as string;
   const supplier = formData.get('supplier') as string;
@@ -20,6 +23,7 @@ async function createMaterial(formData: FormData) {
 
   let masterId: string;
   
+  // A. Check if the ingredient already exists
   const { data: existingMaster } = await supabase
     .from('master_ingredients')
     .select('id')
@@ -29,26 +33,42 @@ async function createMaterial(formData: FormData) {
   if (existingMaster) {
     masterId = existingMaster.id;
   } else {
+    // B. Create new ingredient WITH THE USER ID STAMP
     const { data: newMaster, error: masterError } = await supabase
       .from('master_ingredients')
-      .insert({ name: masterName, default_unit: 'g' })
+      .insert({ 
+        name: masterName, 
+        default_unit: 'g',
+        user_id: user.id // <--- The Multi-Tenant Fix
+      })
       .select()
       .single();
 
-    if (masterError) throw new Error('Failed to create master ingredient');
+    if (masterError) {
+      console.error("Master Insert Error:", masterError);
+      throw new Error(`Database Error: ${masterError.message}`);
+    }
     masterId = newMaster.id;
   }
 
-  await supabase.from('supplier_items').insert({
+  // C. Create the supplier details WITH THE USER ID STAMP
+  const { error: supplierError } = await supabase.from('supplier_items').insert({
     master_ingredient_id: masterId,
     supplier,
     brand,
     cost,
     purchase_quantity: quantity,
     purchase_unit: unit,
-    is_primary: true 
+    is_primary: true,
+    user_id: user.id // <--- The Multi-Tenant Fix
   });
 
+  if (supplierError) {
+    console.error("Supplier Insert Error:", supplierError);
+    throw new Error(`Database Error: ${supplierError.message}`);
+  }
+
+  // D. Success! Go back to the materials list.
   redirect('/materials');
 }
 
