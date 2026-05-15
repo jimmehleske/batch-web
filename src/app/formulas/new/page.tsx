@@ -1,15 +1,15 @@
-import { createClient } from '@/lib/supabase' // Change Importimport Link from 'next/link';
-import Link from 'next/link'
-import FormulaForm from './client-form'
+import { createClient } from '@/lib/supabase';
+import Link from 'next/link';
+import FormulaForm from './client-form';
 
 export default async function NewFormulaPage() {
   
   // Fetch ingredients for the dropdown
-  const supabase = await createClient() // Create client inside the function
+  const supabase = await createClient();
   const { data: ingredients } = await supabase
     .from('master_ingredients')
     .select('id, name, default_unit')
-    .order('name')
+    .order('name');
 
   return (
     <main className="min-h-screen p-24 bg-slate-50">
@@ -25,5 +25,5 @@ export default async function NewFormulaPage() {
         
       </div>
     </main>
-  )
+  );
 }
