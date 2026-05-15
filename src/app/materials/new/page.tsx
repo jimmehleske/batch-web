@@ -2,65 +2,65 @@ import { createClient } from '@/lib/supabase';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
+// 1. THE FIX: The Server Action is now completely OUTSIDE the page component.
+// It runs in total isolation, so Next.js doesn't choke trying to package the page's memory.
+async function createMaterial(formData: FormData) {
+  'use server';
+
+  const supabase = await createClient();
+
+  const rawName = formData.get('name') as string;
+  const supplier = formData.get('supplier') as string;
+  const brand = formData.get('brand') as string;
+  const cost = parseFloat(formData.get('cost') as string);
+  const quantity = parseFloat(formData.get('quantity') as string);
+  const unit = formData.get('unit') as string;
+
+  const masterName = rawName.trim();
+
+  let masterId: string;
+  
+  const { data: existingMaster } = await supabase
+    .from('master_ingredients')
+    .select('id')
+    .ilike('name', masterName)
+    .single();
+
+  if (existingMaster) {
+    masterId = existingMaster.id;
+  } else {
+    const { data: newMaster, error: masterError } = await supabase
+      .from('master_ingredients')
+      .insert({ name: masterName, default_unit: 'g' })
+      .select()
+      .single();
+
+    if (masterError) throw new Error('Failed to create master ingredient');
+    masterId = newMaster.id;
+  }
+
+  await supabase.from('supplier_items').insert({
+    master_ingredient_id: masterId,
+    supplier,
+    brand,
+    cost,
+    purchase_quantity: quantity,
+    purchase_unit: unit,
+    is_primary: true 
+  });
+
+  redirect('/materials');
+}
+
+
+// 2. The Page Component
 export default async function NewMaterialPage() {
   
-  // 1. Fetch existing Master Ingredients for the Auto-Suggest feature (Page level)
   const supabase = await createClient(); 
   const { data: existingMasters } = await supabase
     .from('master_ingredients')
     .select('name')
     .order('name');
-
-  async function createMaterial(formData: FormData) {
-    'use server';
-
-    // THE FIX: Create a fresh Supabase client strictly for this form submission
-    const actionSupabase = await createClient();
-
-    const rawName = formData.get('name') as string;
-    const supplier = formData.get('supplier') as string;
-    const brand = formData.get('brand') as string;
-    const cost = parseFloat(formData.get('cost') as string);
-    const quantity = parseFloat(formData.get('quantity') as string);
-    const unit = formData.get('unit') as string;
-
-    const masterName = rawName.trim();
-
-    let masterId: string;
-    
-    // Use the actionSupabase client here
-    const { data: existingMaster } = await actionSupabase
-      .from('master_ingredients')
-      .select('id')
-      .ilike('name', masterName)
-      .single();
-
-    if (existingMaster) {
-      masterId = existingMaster.id;
-    } else {
-      const { data: newMaster, error: masterError } = await actionSupabase
-        .from('master_ingredients')
-        .insert({ name: masterName, default_unit: 'g' })
-        .select()
-        .single();
-
-      if (masterError) throw new Error('Failed to create master ingredient');
-      masterId = newMaster.id;
-    }
-
-    // Insert Supplier Item using the actionSupabase client
-    await actionSupabase.from('supplier_items').insert({
-      master_ingredient_id: masterId,
-      supplier,
-      brand,
-      cost,
-      purchase_quantity: quantity,
-      purchase_unit: unit,
-      is_primary: true 
-    });
-
-    redirect('/materials');
-  }
 
   return (
     <main className="min-h-screen p-24 bg-slate-50">
@@ -73,7 +73,6 @@ export default async function NewMaterialPage() {
 
         <form action={createMaterial} className="bg-white p-8 rounded-lg shadow-sm border border-slate-200 space-y-6">
           
-          {/* Section 1: Master Ingredient with Auto-Suggest */}
           <div className="bg-blue-50 p-4 rounded-md border border-blue-100">
              <label className="block text-sm font-bold text-blue-900 mb-1">
                 Master Ingredient Name
@@ -82,7 +81,6 @@ export default async function NewMaterialPage() {
                 Start typing to select an existing ingredient, or create a new one.
              </p>
              
-             {/* The Input with the 'list' attribute */}
              <input 
                name="name" 
                type="text" 
@@ -93,7 +91,6 @@ export default async function NewMaterialPage() {
                className="w-full rounded-md border-slate-300 shadow-sm p-2 border text-slate-900 font-semibold placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 outline-none"
              />
 
-             {/* The Hidden List of Options */}
              <datalist id="master-options">
                {existingMasters?.map((m) => (
                  <option key={m.name} value={m.name} />
@@ -103,7 +100,6 @@ export default async function NewMaterialPage() {
 
           <hr className="border-slate-100" />
 
-          {/* Section 2: Supplier Details */}
           <div>
             <h3 className="text-sm font-semibold text-slate-900 mb-4">Supplier Details</h3>
             
