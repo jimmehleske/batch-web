@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase' // Change Importimport Link from 'next/link';
+import { createClient } from '@/lib/supabase';
 import Link from 'next/link';
 
 export default async function BatchesPage() {
   
-  const supabase = await createClient() // Create client inside the function
+  const supabase = await createClient() 
   const { data: batches } = await supabase
     .from('batches')
     .select(`

@@ -101,9 +101,10 @@ export default async function Home() {
           </p>
         </Link>
 
-        {/* Card 6: Live Pricing (NEW) */}
+        {/* Card 6: Live Pricing */}
         <Link
           href="/pricing"
+          prefetch={false}
           className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-slate-300 hover:bg-slate-100 border-slate-200 bg-white shadow-sm"
         >
           <h2 className={`mb-3 text-2xl font-semibold text-slate-900`}>
