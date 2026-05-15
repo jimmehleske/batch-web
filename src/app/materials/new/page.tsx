@@ -1,11 +1,11 @@
-import { createClient } from '@/lib/supabase' // Change Importimport Link from 'next/link';
+import { createClient } from '@/lib/supabase';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
 export default async function NewMaterialPage() {
   
-  // 1. Fetch existing Master Ingredients for the Auto-Suggest feature
-  const supabase = await createClient() // Create client inside the function
+  // 1. Fetch existing Master Ingredients for the Auto-Suggest feature (Page level)
+  const supabase = await createClient(); 
   const { data: existingMasters } = await supabase
     .from('master_ingredients')
     .select('name')
@@ -13,6 +13,9 @@ export default async function NewMaterialPage() {
 
   async function createMaterial(formData: FormData) {
     'use server';
+
+    // THE FIX: Create a fresh Supabase client strictly for this form submission
+    const actionSupabase = await createClient();
 
     const rawName = formData.get('name') as string;
     const supplier = formData.get('supplier') as string;
@@ -23,9 +26,10 @@ export default async function NewMaterialPage() {
 
     const masterName = rawName.trim();
 
-    // Logic: Find existing or Create new Master
     let masterId: string;
-    const { data: existingMaster } = await supabase
+    
+    // Use the actionSupabase client here
+    const { data: existingMaster } = await actionSupabase
       .from('master_ingredients')
       .select('id')
       .ilike('name', masterName)
@@ -34,7 +38,7 @@ export default async function NewMaterialPage() {
     if (existingMaster) {
       masterId = existingMaster.id;
     } else {
-      const { data: newMaster, error: masterError } = await supabase
+      const { data: newMaster, error: masterError } = await actionSupabase
         .from('master_ingredients')
         .insert({ name: masterName, default_unit: 'g' })
         .select()
@@ -44,8 +48,8 @@ export default async function NewMaterialPage() {
       masterId = newMaster.id;
     }
 
-    // Insert Supplier Item
-    await supabase.from('supplier_items').insert({
+    // Insert Supplier Item using the actionSupabase client
+    await actionSupabase.from('supplier_items').insert({
       master_ingredient_id: masterId,
       supplier,
       brand,
